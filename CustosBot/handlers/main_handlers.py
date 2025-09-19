@@ -26,7 +26,7 @@ async def start_command(message: Message):
     # Check if it's a private chat
     if message.chat.type == 'private':
         # Generate main menu image if not exists
-        image_path = "CustosBot/images/main_menu.png"
+        image_path = "images/main_menu.png"
         if not os.path.exists(image_path):
             try:
                 await image_gen.generate_main_menu_image()
@@ -72,7 +72,7 @@ async def start_command(message: Message):
 async def help_command(message: Message):
     """Handle /help command"""
     # Generate commands image if not exists
-    image_path = "CustosBot/images/commands.png"
+    image_path = "images/commands.png"
     if not os.path.exists(image_path):
         try:
             await image_gen.generate_commands_image()
@@ -168,7 +168,7 @@ async def my_chats_command(message: Message):
         return
     
     # Generate my chats image if not exists
-    image_path = "CustosBot/images/my_chats.png"
+    image_path = "images/my_chats.png"
     if not os.path.exists(image_path):
         try:
             await image_gen.generate_my_chats_image()
@@ -256,7 +256,7 @@ async def back_to_menu_handler(callback: CallbackQuery):
         return
     
     # Generate main menu image if not exists
-    image_path = "CustosBot/images/main_menu.png"
+    image_path = "images/main_menu.png"
     if not os.path.exists(image_path):
         try:
             await image_gen.generate_main_menu_image()

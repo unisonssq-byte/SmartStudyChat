@@ -41,7 +41,7 @@ async def me_command(message: Message):
         return
     
     # Generate user profile image if not exists
-    image_path = "CustosBot/images/user_profile.png"
+    image_path = "images/user_profile.png"
     if not os.path.exists(image_path):
         try:
             await image_gen.generate_user_profile_image()
@@ -100,7 +100,7 @@ async def you_command(message: Message):
         return
     
     # Generate user profile image if not exists
-    image_path = "CustosBot/images/user_profile.png"
+    image_path = "images/user_profile.png"
     if not os.path.exists(image_path):
         try:
             await image_gen.generate_user_profile_image()
@@ -214,19 +214,4 @@ async def description_command(message: Message):
     await db.set_user_description(user.id, description)
     await message.answer(f"✅ Описание установлено: **{description}**", parse_mode="Markdown")
 
-@router.message(F.content_type == "text")
-async def track_messages(message: Message):
-    """Track user messages for statistics"""
-    user = message.from_user
-    chat = message.chat
-    
-    if not user or chat.type == 'private':
-        return
-    
-    # Add user and chat if not exists
-    await db.add_user(user.id, user.username, user.first_name, user.last_name)
-    await db.add_chat(chat.id, chat.title or "Unknown Chat", chat.type)
-    await db.add_chat_member(user.id, chat.id)
-    
-    # Increment message count
-    await db.increment_message_count(user.id, chat.id)
+# Message tracking is handled by main_handlers.py

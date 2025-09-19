@@ -11,7 +11,7 @@ from openai import OpenAI
 class ImageGenerator:
     def __init__(self):
         self.openai_client = None
-        self.images_path = "CustosBot/images"
+        self.images_path = "images"
         os.makedirs(self.images_path, exist_ok=True)
         
         # Initialize OpenAI client only if API key is available
