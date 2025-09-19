@@ -84,10 +84,14 @@ async def help_command(message: Message):
 
 **Модерация (только в чатах):**
 • `/upstaff [число] [пользователь]` - повысить ранг
-• `/ban [пользователь] [причина]` - забанить
-• `/warn [пользователь] [причина]` - выдать варн
-• `/kick [пользователь] [причина]` - кикнуть
-• `/staff` - список персонала
+• `/ban [пользователь] [причина]` или `бан [пользователь] [причина]` - забанить
+• `/warn [пользователь] [причина]` или `варн [пользователь] [причина]` - выдать варн
+• `/kick [пользователь] [причина]` или `кик [пользователь] [причина]` - кикнуть
+• `/staff` или `стафф`, `админы`, `стаф`, `кто админ` - список персонала
+• `/stats` или `стата` - статистика активности чата
+
+**Информация:**
+• `/help` или `помощь` - эта справка
 
 **Профиль:**
 • `/me` или `кто я` - моя информация
@@ -169,3 +173,47 @@ async def my_chats_command(message: Message):
 async def commands_button(message: Message):
     """Handle 'Commands' button"""
     await help_command(message)
+
+@router.message(F.text.in_(["помощь"]))
+async def help_text_command(message: Message):
+    """Handle text alternatives for /help command"""
+    await help_command(message)
+
+@router.message(F.new_chat_members)
+async def new_chat_members(message: Message):
+    """Handle when bot is added to a chat"""
+    if not message.new_chat_members:
+        return
+    
+    # Check if bot was added
+    bot_info = await message.bot.get_me()
+    for member in message.new_chat_members:
+        if member.id == bot_info.id:
+            # Bot was added to chat
+            await message.answer(
+                "🤖 **Добро пожаловать!**\n\n"
+                "Я Custos - ваш помощник по управлению чатом!\n\n"
+                "⚠️ **Важно:** Для полноценной работы мне необходимы права администратора чата.\n"
+                "Пожалуйста, дайте мне права администратора для использования всех функций модерации.\n\n"
+                "Используйте команду /help для просмотра доступных команд.",
+                parse_mode="Markdown"
+            )
+            
+            # Add chat to database
+            chat = message.chat
+            await db.add_chat(chat.id, chat.title or "Unknown Chat", chat.type)
+            break
+
+@router.message(F.content_type.in_(["text"]))
+async def track_messages(message: Message):
+    """Track messages for statistics"""
+    user = message.from_user
+    chat = message.chat
+    
+    if not user or chat.type == 'private':
+        return
+    
+    # Add user and update message count
+    await db.add_user(user.id, user.username, user.first_name, user.last_name)
+    await db.add_chat_member(user.id, chat.id)
+    await db.increment_message_count(user.id, chat.id)

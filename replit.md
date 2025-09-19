@@ -37,7 +37,39 @@ CustosBot/
 - ✅ Python environment and dependencies installed successfully
 - ✅ Environment variable validation implemented with clear error messages
 - ✅ Bot workflow configured and ready to run
+- ✅ **Administrator permission system fixed**: Now checks real Telegram chat permissions and syncs with database
+- ✅ **Alternative text commands added**: Commands work without "/" (стафф, админы, бан, кик, варн, помощь, стата)
+- ✅ **Chat statistics command added**: /stats shows most active users by message count
+- ✅ **Welcome message added**: Bot requests admin rights when added to new chats
+- ✅ **Security vulnerabilities fixed**: Protected against privilege escalation and unauthorized actions
 - ⏳ **Ready for user to provide credentials**: The bot is fully set up and will start once environment variables are configured
+
+## Recent Fixes (Sept 19, 2025)
+### Administrator Rights System
+- Fixed permission checking to use real Telegram chat status instead of only database ranks
+- Chat creators automatically get "owner" rank, administrators get "administrator" rank
+- Moderator rank is preserved from database for regular members
+- All moderation commands now properly check Telegram permissions
+
+### Alternative Commands  
+- `стафф`, `админы`, `стаф`, `кто админ` → /staff
+- `стата` → /stats  
+- `помощь` → /help
+- `бан [пользователь] [причина]` → /ban
+- `кик [пользователь] [причина]` → /kick  
+- `варн [пользователь] [причина]` → /warn
+
+### New Features
+- **/stats command**: Shows chat activity statistics with top 20 most active users
+- **Welcome message**: Bot requests admin permissions when added to new chats
+- **Message tracking**: All text messages are tracked for statistics
+- **Rank protection**: Users cannot moderate equal or higher-ranked members
+
+### Security Improvements
+- Fixed critical privilege escalation in /upstaff command
+- Added fail-closed security for permission checks
+- Improved target user parsing for moderation commands
+- Protected against actions on equal/higher ranks
 
 ## Dependencies
 The bot requires the following Python packages:

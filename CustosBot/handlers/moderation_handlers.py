@@ -13,6 +13,42 @@ db = Database()
 # Rate limit storage (in production, use Redis or database)
 rate_limits = {}
 
+async def get_user_telegram_rank(message: Message, user_id: int) -> str:
+    """Get user's real rank from Telegram chat and sync with database"""
+    try:
+        chat_member = await message.bot.get_chat_member(message.chat.id, user_id)
+        
+        if chat_member.status == "creator":
+            # Chat creator (owner)
+            await db.add_chat_member(user_id, message.chat.id)
+            await db.update_user_rank(user_id, message.chat.id, "owner")
+            return "owner"
+        elif chat_member.status == "administrator":
+            # Chat administrator
+            await db.add_chat_member(user_id, message.chat.id)
+            await db.update_user_rank(user_id, message.chat.id, "administrator")
+            return "administrator"
+        elif chat_member.status in ["member", "restricted"]:
+            # Regular member - check if they have a rank in database
+            db_rank = await db.get_user_rank(user_id, message.chat.id)
+            if db_rank and db_rank in ["moderator"]:
+                # Keep moderator rank from database
+                return db_rank
+            else:
+                # Regular participant
+                await db.add_chat_member(user_id, message.chat.id)
+                await db.update_user_rank(user_id, message.chat.id, "participant")
+                return "participant"
+        else:
+            # Left or kicked
+            return "participant"
+            
+    except Exception as e:
+        print(f"Error getting chat member: {e}")
+        # Fallback to database rank if Telegram API fails
+        db_rank = await db.get_user_rank(user_id, message.chat.id)
+        return db_rank or "participant"
+
 async def check_rate_limit(user_id: int, command: str, rank: str) -> bool:
     """Check if user is rate limited for command"""
     if rank in ['administrator', 'owner']:
@@ -52,6 +88,41 @@ async def get_target_user(message: Message, text: str) -> tuple[int, str]:
     
     return 0, ""
 
+async def get_moderation_target_user(message: Message, text: str) -> tuple[int, str]:
+    """Extract target user for ban/warn/kick commands"""
+    # Check if it's a reply
+    if message.reply_to_message and message.reply_to_message.from_user:
+        user = message.reply_to_message.from_user
+        return user.id, user.first_name or user.username or str(user.id)
+    
+    # Parse username or user ID from text for ban/warn/kick (target is at position 1)
+    words = text.split()[1:]  # Skip command only
+    if words:
+        target = words[0]
+        if target.startswith('@'):
+            # Username - in real implementation, you'd need to resolve this
+            return 0, target  # Placeholder
+        elif target.isdigit():
+            return int(target), target
+    
+    return 0, ""
+
+async def can_moderate_target(message: Message, user_rank: str, target_user_id: int) -> bool:
+    """Check if user can moderate target (prevent acting on equal/higher ranks)"""
+    try:
+        target_rank = await get_user_telegram_rank(message, target_user_id)
+        
+        # Rank hierarchy: owner (3) > administrator (2) > moderator (1) > participant (0)
+        user_level = RANKS.get(user_rank, 0)
+        target_level = RANKS.get(target_rank, 0)
+        
+        # Cannot moderate equal or higher ranks
+        return user_level > target_level
+    except Exception as e:
+        # SECURITY: If we can't determine target rank, DENY moderation (fail-closed)
+        print(f"Error determining target rank for user {target_user_id}: {e}")
+        return False
+
 @router.message(Command("upstaff"))
 async def upstaff_command(message: Message):
     """Handle /upstaff command for rank promotion"""
@@ -62,8 +133,8 @@ async def upstaff_command(message: Message):
         await message.answer("❌ Команда доступна только в групповых чатах!")
         return
     
-    # Get user rank
-    user_rank = await db.get_user_rank(user.id, chat.id)
+    # Get user rank from Telegram and sync with database
+    user_rank = await get_user_telegram_rank(message, user.id)
     if not user_rank or user_rank not in COMMAND_PERMISSIONS['upstaff']:
         await message.answer("❌ Слишком низкий ранг для использования этой команды!")
         return
@@ -108,7 +179,12 @@ async def upstaff_command(message: Message):
         await message.answer("❌ Невозможно повысить до указанного ранга!")
         return
     
-    # Permission check
+    # Permission check - only owner can promote to owner
+    if new_rank == 'owner' and user_rank != 'owner':
+        await message.answer("❌ Только владелец может назначать нового владельца!")
+        return
+    
+    # Administrator cannot promote owners
     if user_rank == 'administrator' and target_rank == 'owner':
         await message.answer("❌ Администратор не может повышать владельца!")
         return
@@ -139,7 +215,7 @@ async def confirm_owner_promotion(callback: CallbackQuery):
         return
     
     # Check if user is owner
-    user_rank = await db.get_user_rank(user.id, chat.id)
+    user_rank = await get_user_telegram_rank(callback.message, user.id)
     if user_rank != 'owner':
         await callback.answer("🚫 Эта кнопка не для вас ^-^", show_alert=True)
         return
@@ -170,7 +246,7 @@ async def ban_command(message: Message):
         return
     
     # Check permissions
-    user_rank = await db.get_user_rank(user.id, chat.id)
+    user_rank = await get_user_telegram_rank(message, user.id)
     if not user_rank or user_rank not in COMMAND_PERMISSIONS['ban']:
         await message.answer("❌ Недостаточно прав для использования этой команды!")
         return
@@ -182,11 +258,16 @@ async def ban_command(message: Message):
         await message.answer("❌ Использование: `/ban [пользователь] [причина]`", parse_mode="Markdown")
         return
     
-    target_user_id, target_name = await get_target_user(message, text)
+    target_user_id, target_name = await get_moderation_target_user(message, text)
     reason = parts[2] if len(parts) > 2 else "Нарушение правил"
     
     if not target_user_id:
         await message.answer("❌ Не удалось найти указанного пользователя!")
+        return
+    
+    # Check if user can moderate target
+    if not await can_moderate_target(message, user_rank, target_user_id):
+        await message.answer("❌ Нельзя забанить пользователя с равным или высшим рангом!")
         return
     
     try:
@@ -207,7 +288,7 @@ async def warn_command(message: Message):
         return
     
     # Check permissions
-    user_rank = await db.get_user_rank(user.id, chat.id)
+    user_rank = await get_user_telegram_rank(message, user.id)
     if not user_rank or user_rank not in COMMAND_PERMISSIONS['warn']:
         await message.answer("❌ Недостаточно прав для использования этой команды!")
         return
@@ -224,11 +305,16 @@ async def warn_command(message: Message):
         await message.answer("❌ Использование: `/warn [пользователь] [причина]`", parse_mode="Markdown")
         return
     
-    target_user_id, target_name = await get_target_user(message, text)
+    target_user_id, target_name = await get_moderation_target_user(message, text)
     reason = parts[2] if len(parts) > 2 else "Нарушение правил"
     
     if not target_user_id:
         await message.answer("❌ Не удалось найти указанного пользователя!")
+        return
+    
+    # Check if user can moderate target
+    if not await can_moderate_target(message, user_rank, target_user_id):
+        await message.answer("❌ Нельзя выдать варн пользователю с равным или высшим рангом!")
         return
     
     # Add warning
@@ -257,7 +343,7 @@ async def kick_command(message: Message):
         return
     
     # Check permissions
-    user_rank = await db.get_user_rank(user.id, chat.id)
+    user_rank = await get_user_telegram_rank(message, user.id)
     if not user_rank or user_rank not in COMMAND_PERMISSIONS['kick']:
         await message.answer("❌ Недостаточно прав для использования этой команды!")
         return
@@ -274,11 +360,16 @@ async def kick_command(message: Message):
         await message.answer("❌ Использование: `/kick [пользователь] [причина]`", parse_mode="Markdown")
         return
     
-    target_user_id, target_name = await get_target_user(message, text)
+    target_user_id, target_name = await get_moderation_target_user(message, text)
     reason = parts[2] if len(parts) > 2 else "Нарушение правил"
     
     if not target_user_id:
         await message.answer("❌ Не удалось найти указанного пользователя!")
+        return
+    
+    # Check if user can moderate target
+    if not await can_moderate_target(message, user_rank, target_user_id):
+        await message.answer("❌ Нельзя кикнуть пользователя с равным или высшим рангом!")
         return
     
     try:
@@ -330,3 +421,92 @@ async def staff_command(message: Message):
         staff_text += "Персонал не назначен."
     
     await message.answer(staff_text, parse_mode="Markdown")
+
+@router.message(Command("stats"))
+async def stats_command(message: Message):
+    """Handle /stats command for chat statistics"""
+    chat = message.chat
+    
+    if chat.type == 'private':
+        await message.answer("❌ Команда доступна только в групповых чатах!")
+        return
+    
+    # Get chat statistics from database
+    results = await db.get_chat_stats(chat.id, 20)
+    
+    if not results:
+        await message.answer("📊 **Статистика чата**\n\nСтатистика пока не собрана. Начните общаться в чате!")
+        return
+    
+    stats_text = "📊 **Статистика активности чата**\n\n"
+    stats_text += "🏆 **Самые активные участники:**\n\n"
+    
+    for i, row in enumerate(results, 1):
+        user_id, nickname, first_name, username, message_count = row
+        # Use nickname if available, otherwise first_name, then username, then user_id
+        display_name = nickname or first_name or username or str(user_id)
+        
+        if i == 1:
+            emoji = "🥇"
+        elif i == 2:
+            emoji = "🥈"
+        elif i == 3:
+            emoji = "🥉"
+        else:
+            emoji = f"{i}."
+        
+        stats_text += f"{emoji} {display_name} — {message_count} сообщений\n"
+    
+    await message.answer(stats_text, parse_mode="Markdown")
+
+# Alternative text commands (without slash)
+@router.message(F.text.in_(["стафф", "админы", "стаф", "кто админ"]))
+async def staff_text_command(message: Message):
+    """Handle text alternatives for /staff command"""
+    if message.chat.type != 'private':
+        await staff_command(message)
+
+@router.message(F.text.in_(["стата"]))
+async def stats_text_command(message: Message):
+    """Handle text alternatives for /stats command"""
+    if message.chat.type != 'private':
+        await stats_command(message)
+
+@router.message(F.text.regexp(r"^бан\s+.+"))
+async def ban_text_command(message: Message):
+    """Handle text alternatives for /ban command"""
+    if message.chat.type == 'private':
+        return
+    
+    # Convert text to command format
+    text = message.text or ""
+    if text.startswith("бан "):
+        # Create a fake command message
+        message.text = "/ban " + text[4:]  # Replace "бан " with "/ban "
+        await ban_command(message)
+
+@router.message(F.text.regexp(r"^кик\s+.+"))
+async def kick_text_command(message: Message):
+    """Handle text alternatives for /kick command"""
+    if message.chat.type == 'private':
+        return
+    
+    # Convert text to command format
+    text = message.text or ""
+    if text.startswith("кик "):
+        # Create a fake command message
+        message.text = "/kick " + text[4:]  # Replace "кик " with "/kick "
+        await kick_command(message)
+
+@router.message(F.text.regexp(r"^варн\s+.+"))
+async def warn_text_command(message: Message):
+    """Handle text alternatives for /warn command"""
+    if message.chat.type == 'private':
+        return
+    
+    # Convert text to command format
+    text = message.text or ""
+    if text.startswith("варн "):
+        # Create a fake command message
+        message.text = "/warn " + text[5:]  # Replace "варн " with "/warn "
+        await warn_command(message)

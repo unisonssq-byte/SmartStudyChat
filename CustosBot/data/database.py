@@ -252,3 +252,21 @@ class Database:
             """, (user_id, chat_id))
             result = await cursor.fetchone()
             return result[0] if result else 0
+    
+    async def get_chat_stats(self, chat_id: int, limit: int = 20):
+        """Get chat statistics - top active users"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                SELECT 
+                    u.user_id,
+                    u.nickname,
+                    u.first_name,
+                    u.username,
+                    cm.message_count
+                FROM chat_members cm
+                JOIN users u ON cm.user_id = u.user_id
+                WHERE cm.chat_id = ? AND cm.message_count > 0
+                ORDER BY cm.message_count DESC
+                LIMIT ?
+            """, (chat_id, limit))
+            return await cursor.fetchall()
