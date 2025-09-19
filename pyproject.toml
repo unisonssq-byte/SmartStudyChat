@@ -8,6 +8,7 @@ dependencies = [
     "aiogram>=3.22.0",
     "aiosqlite>=0.21.0",
     "matplotlib>=3.10.6",
+    "openai>=1.108.1",
     "pillow>=11.3.0",
     "requests>=2.32.5",
 ]
