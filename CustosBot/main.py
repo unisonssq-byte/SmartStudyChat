@@ -42,7 +42,7 @@ async def main():
     dp.include_router(main_handlers.router)
     
     # Create images directory
-    os.makedirs("CustosBot/images", exist_ok=True)
+    os.makedirs("images", exist_ok=True)
     
     logger.info("Custos Bot is starting...")
     
