@@ -88,23 +88,35 @@ async def get_target_user(message: Message, text: str) -> tuple[int, str]:
     
     return 0, ""
 
-async def get_moderation_target_user(message: Message, text: str) -> tuple[int, str]:
+async def get_moderation_target_user(message: Message, text: str = None) -> tuple[int, str]:
     """Extract target user for ban/warn/kick commands"""
     # Check if it's a reply
     if message.reply_to_message and message.reply_to_message.from_user:
         user = message.reply_to_message.from_user
         return user.id, user.first_name or user.username or str(user.id)
     
+    # Use provided text or message.text
+    command_text = text or message.text or ""
+    print(f"DEBUG: Parsing target from: {command_text}")
+    
     # Parse username or user ID from text for ban/warn/kick (target is at position 1)
-    words = text.split()[1:]  # Skip command only
+    words = command_text.split()[1:]  # Skip command only
+    print(f"DEBUG: Words after command: {words}")
     if words:
         target = words[0]
+        print(f"DEBUG: Target string: {target}")
         if target.startswith('@'):
-            # Username - in real implementation, you'd need to resolve this
-            return 0, target  # Placeholder
+            # Username - try to find user in chat members
+            print(f"DEBUG: Looking for username {target}")
+            # For now return 0 as we don't have username resolution
+            return 0, target
         elif target.isdigit():
+            print(f"DEBUG: Found user ID: {target}")
             return int(target), target
+        else:
+            print(f"DEBUG: Invalid target format: {target}")
     
+    print("DEBUG: No target found")
     return 0, ""
 
 async def can_moderate_target(message: Message, user_rank: str, target_user_id: int) -> bool:
@@ -389,8 +401,10 @@ async def staff_command(message: Message):
         await message.answer("❌ Команда доступна только в групповых чатах!")
         return
     
+    print(f"DEBUG: Getting staff for chat {chat.id}")
     # Get staff list
     staff = await db.get_staff_list(chat.id)
+    print(f"DEBUG: Staff result: {staff}")
     
     staff_text = "👥 **Персонал чата:**\n\n"
     
@@ -420,6 +434,7 @@ async def staff_command(message: Message):
     if not any(staff.values()):
         staff_text += "Персонал не назначен."
     
+    print(f"DEBUG: Final staff text: {staff_text}")
     await message.answer(staff_text, parse_mode="Markdown")
 
 @router.message(Command("stats"))
@@ -475,38 +490,145 @@ async def stats_text_command(message: Message):
 @router.message(F.text.regexp(r"^бан\s+.+"))
 async def ban_text_command(message: Message):
     """Handle text alternatives for /ban command"""
-    if message.chat.type == 'private':
+    user = message.from_user
+    chat = message.chat
+    
+    if not user or chat.type == 'private':
         return
     
-    # Convert text to command format
+    # Check permissions
+    user_rank = await get_user_telegram_rank(message, user.id)
+    if not user_rank or user_rank not in COMMAND_PERMISSIONS['ban']:
+        await message.answer("❌ Недостаточно прав для использования этой команды!")
+        return
+    
     text = message.text or ""
-    if text.startswith("бан "):
-        # Create a fake command message
-        message.text = "/ban " + text[4:]  # Replace "бан " with "/ban "
-        await ban_command(message)
+    # Convert: "бан пользователь причина" -> "/ban пользователь причина"
+    command_text = "/ban " + text[4:]  # Replace "бан " with "/ban "
+    parts = command_text.split(maxsplit=2)
+    
+    if len(parts) < 3:
+        await message.answer("❌ Использование: `бан [пользователь] [причина]`", parse_mode="Markdown")
+        return
+    
+    target_user_id, target_name = await get_moderation_target_user(message, command_text)
+    reason = parts[2] if len(parts) > 2 else "Нарушение правил"
+    
+    if not target_user_id:
+        await message.answer("❌ Не удалось найти указанного пользователя!")
+        return
+    
+    # Check if user can moderate target
+    if not await can_moderate_target(message, user_rank, target_user_id):
+        await message.answer("❌ Нельзя забанить пользователя с равным или высшим рангом!")
+        return
+    
+    try:
+        # Try to ban user from chat
+        await message.chat.ban(target_user_id)
+        await message.answer(f"🚫 {target_name} исключен из чата.\nПричина: {reason}")
+    except Exception as e:
+        await message.answer(f"❌ Не удалось забанить пользователя: {str(e)}")
 
 @router.message(F.text.regexp(r"^кик\s+.+"))
 async def kick_text_command(message: Message):
     """Handle text alternatives for /kick command"""
-    if message.chat.type == 'private':
+    user = message.from_user
+    chat = message.chat
+    
+    if not user or chat.type == 'private':
         return
     
-    # Convert text to command format
+    # Check permissions
+    user_rank = await get_user_telegram_rank(message, user.id)
+    if not user_rank or user_rank not in COMMAND_PERMISSIONS['kick']:
+        await message.answer("❌ Недостаточно прав для использования этой команды!")
+        return
+    
+    # Check rate limit
+    if not await check_rate_limit(user.id, 'kick', user_rank):
+        await message.answer("⏰ Модератор может использовать эту команду раз в 15 минут!")
+        return
+    
     text = message.text or ""
-    if text.startswith("кик "):
-        # Create a fake command message
-        message.text = "/kick " + text[4:]  # Replace "кик " with "/kick "
-        await kick_command(message)
+    command_text = "/kick " + text[4:]  # Replace "кик " with "/kick "
+    parts = command_text.split(maxsplit=2)
+    
+    if len(parts) < 3:
+        await message.answer("❌ Использование: `кик [пользователь] [причина]`", parse_mode="Markdown")
+        return
+    
+    target_user_id, target_name = await get_moderation_target_user(message, command_text)
+    reason = parts[2] if len(parts) > 2 else "Нарушение правил"
+    
+    if not target_user_id:
+        await message.answer("❌ Не удалось найти указанного пользователя!")
+        return
+    
+    # Check if user can moderate target
+    if not await can_moderate_target(message, user_rank, target_user_id):
+        await message.answer("❌ Нельзя кикнуть пользователя с равным или высшим рангом!")
+        return
+    
+    try:
+        # Kick user (unban immediately after ban)
+        await message.chat.ban(target_user_id)
+        await message.chat.unban(target_user_id)
+        await message.answer(f"👢 {target_name} исключен из чата временно.\nПричина: {reason}")
+    except Exception as e:
+        await message.answer(f"❌ Не удалось кикнуть пользователя: {str(e)}")
 
 @router.message(F.text.regexp(r"^варн\s+.+"))
 async def warn_text_command(message: Message):
     """Handle text alternatives for /warn command"""
-    if message.chat.type == 'private':
+    user = message.from_user
+    chat = message.chat
+    
+    if not user or chat.type == 'private':
         return
     
-    # Convert text to command format
+    # Check permissions
+    user_rank = await get_user_telegram_rank(message, user.id)
+    if not user_rank or user_rank not in COMMAND_PERMISSIONS['warn']:
+        await message.answer("❌ Недостаточно прав для использования этой команды!")
+        return
+    
+    # Check rate limit
+    if not await check_rate_limit(user.id, 'warn', user_rank):
+        await message.answer("⏰ Вы можете использовать эту команду раз в час!")
+        return
+    
     text = message.text or ""
-    if text.startswith("варн "):
-        # Create a fake command message
-        message.text = "/warn " + text[5:]  # Replace "варн " with "/warn "
-        await warn_command(message)
+    command_text = "/warn " + text[5:]  # Replace "варн " with "/warn "
+    parts = command_text.split(maxsplit=2)
+    
+    if len(parts) < 3:
+        await message.answer("❌ Использование: `варн [пользователь] [причина]`", parse_mode="Markdown")
+        return
+    
+    target_user_id, target_name = await get_moderation_target_user(message, command_text)
+    reason = parts[2] if len(parts) > 2 else "Нарушение правил"
+    
+    if not target_user_id:
+        await message.answer("❌ Не удалось найти указанного пользователя!")
+        return
+    
+    # Check if user can moderate target
+    if not await can_moderate_target(message, user_rank, target_user_id):
+        await message.answer("❌ Нельзя выдать варн пользователю с равным или высшим рангом!")
+        return
+    
+    # Add warning
+    await db.add_warning(target_user_id, chat.id, reason, user.id)
+    
+    # Check warning count
+    warning_count = await db.get_warning_count(target_user_id, chat.id)
+    
+    if warning_count >= 5:
+        try:
+            await message.chat.ban(target_user_id)
+            await message.answer(f"🚫 {target_name} получил 5-й варн и автоматически забанен!")
+        except Exception as e:
+            await message.answer(f"⚠️ {target_name} получил {warning_count}-й варн! Причина: {reason}")
+    else:
+        await message.answer(f"⚠️ {target_name} получил варн ({warning_count}/5). Причина: {reason}")
