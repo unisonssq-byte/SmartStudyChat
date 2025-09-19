@@ -23,9 +23,9 @@ args = "Custos Bot"
 name = "Custos Bot"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd CustosBot && uv run python main.py"
-
-[workflows.workflow.metadata]
-outputType = "console"

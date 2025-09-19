@@ -60,6 +60,23 @@ CustosBot/
 - `кик [пользователь] [причина]` → /kick  
 - `варн [пользователь] [причина]` → /warn
 
+### CRITICAL MODERATION FIXES (Sept 19, 2025)
+- **🔧 FIXED**: Completely rewritten user targeting system for ban/warn/kick commands
+- **✅ NOW WORKS**: Commands work with replies to messages (most reliable method)
+- **✅ NOW WORKS**: Username resolution through database (@username, username)
+- **✅ NOW WORKS**: Nickname and name-based user search
+- **✅ NOW WORKS**: Direct user ID targeting
+- **🔧 FIXED**: Made reason parameter optional for all moderation commands
+- **🔧 FIXED**: Alternative text commands (бан, кик, варн) now parse correctly
+- **🔧 FIXED**: Added proper debug logging for troubleshooting
+
+### User Targeting Methods Now Supported
+1. **Reply to message** (most reliable): Reply to user's message + command
+2. **Username**: `/ban @username` or `/ban username`  
+3. **User ID**: `/ban 123456789`
+4. **Nickname**: `/ban user_nickname` (if set in bot database)
+5. **First name**: `/ban FirstName` (exact match)
+
 ### New Features
 - **/stats command**: Shows chat activity statistics with top 20 most active users
 - **Welcome message**: Bot requests admin permissions when added to new chats
