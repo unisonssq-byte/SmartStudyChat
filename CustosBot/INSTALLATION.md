@@ -103,12 +103,20 @@ echo 'export OPENAI_API_KEY="your-openai-api-key-here"' >> ~/.bashrc
 
 ### Шаг 4: Проверка конфигурации
 
-Убедитесь, что в файле `config.py` указаны правильные токены:
+Убедитесь, что в файле `config.py` используются переменные окружения для безопасности:
 
 ```python
-BOT_TOKEN = "8356598661:AAEkViCdVcJQFi-FKMEuP1oVtWU0oROKANM"
-API_ID = 25534167
-API_HASH = "a03ad3366f412b5e881b5f9ffd551f75"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+API_ID = int(os.environ.get("API_ID", "0"))
+API_HASH = os.environ.get("API_HASH")
+```
+
+Установите переменные окружения с вашими реальными значениями:
+
+```bash
+export BOT_TOKEN="your-bot-token-here"
+export API_ID="your-api-id-here"
+export API_HASH="your-api-hash-here"
 ```
 
 ### Шаг 5: Тестовый запуск
@@ -150,6 +158,9 @@ Type=simple
 User=username
 WorkingDirectory=/home/username/custos_bot/CustosBot
 Environment=PATH=/home/username/custos_bot/CustosBot/venv/bin
+Environment=BOT_TOKEN=your-bot-token-here
+Environment=API_ID=your-api-id-here
+Environment=API_HASH=your-api-hash-here
 Environment=OPENAI_API_KEY=your-openai-api-key-here
 ExecStart=/home/username/custos_bot/CustosBot/venv/bin/python main.py
 Restart=always
