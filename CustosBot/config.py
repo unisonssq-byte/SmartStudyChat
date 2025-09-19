@@ -5,6 +5,19 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 API_ID = int(os.environ.get("API_ID", "0"))
 API_HASH = os.environ.get("API_HASH")
 
+# Validate required environment variables
+if not BOT_TOKEN:
+    print("ERROR: BOT_TOKEN environment variable is required!")
+    print("Please set it using: export BOT_TOKEN='your-bot-token-here'")
+
+if API_ID == 0:
+    print("WARNING: API_ID environment variable is not set or invalid!")
+    print("Please set it using: export API_ID='your-api-id-here'")
+
+if not API_HASH:
+    print("WARNING: API_HASH environment variable is not set!")
+    print("Please set it using: export API_HASH='your-api-hash-here'")
+
 # Bot commands help text
 BOT_DESCRIPTION = """
 🤖 **Custos | Чат-менеджер** — ваш помощник для управления чатами

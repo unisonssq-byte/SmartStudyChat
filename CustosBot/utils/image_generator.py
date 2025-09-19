@@ -10,12 +10,26 @@ from openai import OpenAI
 
 class ImageGenerator:
     def __init__(self):
-        self.openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        self.openai_client = None
         self.images_path = "CustosBot/images"
         os.makedirs(self.images_path, exist_ok=True)
+        
+        # Initialize OpenAI client only if API key is available
+        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        if openai_api_key:
+            try:
+                self.openai_client = OpenAI(api_key=openai_api_key)
+            except Exception as e:
+                print(f"Failed to initialize OpenAI client: {e}")
+                self.openai_client = None
     
     async def generate_with_openai(self, prompt: str, filename: str) -> str:
         """Generate image using OpenAI DALL-E"""
+        # If OpenAI client is not available, fallback to local generation
+        if not self.openai_client:
+            print("OpenAI client not available, using local generation")
+            return await self.generate_local(prompt, filename)
+            
         try:
             response = self.openai_client.images.generate(
                 model="dall-e-3",

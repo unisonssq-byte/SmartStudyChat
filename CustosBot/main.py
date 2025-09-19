@@ -15,6 +15,16 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Main function to start the bot"""
+    # Check if BOT_TOKEN is available
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN is not set! Please configure environment variables.")
+        logger.error("Required environment variables:")
+        logger.error("- BOT_TOKEN: Your Telegram bot token")
+        logger.error("- API_ID: Your Telegram API ID")
+        logger.error("- API_HASH: Your Telegram API hash")
+        logger.error("- OPENAI_API_KEY: Your OpenAI API key (optional)")
+        return
+    
     # Initialize bot and dispatcher
     bot = Bot(
         token=BOT_TOKEN,
