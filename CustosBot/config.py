@@ -1,9 +1,9 @@
 # Bot configuration
 import os
 
-BOT_TOKEN = '8356598661:AAEkViCdVcJQFi-FKMEuP1oVtWU0oROKANM'
-API_ID = 25534167
-API_HASH = 'a03ad3366f412b5e881b5f9ffd551f75'
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+API_ID = int(os.getenv('API_ID', '0'))
+API_HASH = os.getenv('API_HASH')
 
 # Validate required environment variables
 if not BOT_TOKEN:
