@@ -1,20 +1,12 @@
 # Bot configuration
 import os
 
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-API_ID = int(os.getenv('API_ID', '0'))
-API_HASH = os.getenv('API_HASH')
+BOT_TOKEN = '8356598661:AAEkViCdVcJQFi-FKMEuP1oVtWU0oROKANM
+API_ID = 25534167
+API_HASH = 'a03ad3366f412b5e881b5f9ffd551f75'
 
 # Validate required environment variables
-if not BOT_TOKEN:
-    print("ERROR: BOT_TOKEN environment variable is required!")
-    print("Please set it using: export BOT_TOKEN='your-bot-token-here'")
-if API_ID == 0:
-    print("WARNING: API_ID environment variable is not set or invalid!")
-    print("Please set it using: export API_ID='your-api-id-here'")
-if not API_HASH:
-    print("WARNING: API_HASH environment variable is not set!")
-    print("Please set it using: export API_HASH='your-api-hash-here'")
+
 
 # Bot commands help text
 BOT_DESCRIPTION = """
