@@ -90,34 +90,66 @@ async def get_target_user(message: Message, text: str) -> tuple[int, str]:
 
 async def get_moderation_target_user(message: Message, text: str = None) -> tuple[int, str]:
     """Extract target user for ban/warn/kick commands"""
-    # Check if it's a reply
+    # Check if it's a reply first - this is the most reliable method
     if message.reply_to_message and message.reply_to_message.from_user:
         user = message.reply_to_message.from_user
-        return user.id, user.first_name or user.username or str(user.id)
+        display_name = user.first_name or user.username or str(user.id)
+        print(f"DEBUG: Found user via reply: {user.id} ({display_name})")
+        return user.id, display_name
     
     # Use provided text or message.text
     command_text = text or message.text or ""
     print(f"DEBUG: Parsing target from: {command_text}")
     
-    # Parse username or user ID from text for ban/warn/kick (target is at position 1)
-    words = command_text.split()[1:]  # Skip command only
-    print(f"DEBUG: Words after command: {words}")
-    if words:
-        target = words[0]
-        print(f"DEBUG: Target string: {target}")
-        if target.startswith('@'):
-            # Username - try to find user in chat members
-            print(f"DEBUG: Looking for username {target}")
-            # For now return 0 as we don't have username resolution
-            return 0, target
-        elif target.isdigit():
-            print(f"DEBUG: Found user ID: {target}")
-            return int(target), target
-        else:
-            print(f"DEBUG: Invalid target format: {target}")
+    # Parse target from text (target is at position 1 after command)
+    words = command_text.split()
+    if len(words) < 2:
+        print("DEBUG: No target specified in command")
+        return 0, ""
     
-    print("DEBUG: No target found")
-    return 0, ""
+    target = words[1]
+    print(f"DEBUG: Target string: {target}")
+    
+    # Try different methods to find the user
+    user_id = None
+    display_name = target
+    
+    # Method 1: Direct user ID
+    if target.isdigit():
+        user_id = int(target)
+        display_name = target
+        print(f"DEBUG: Found direct user ID: {user_id}")
+    
+    # Method 2: Username (with or without @)
+    elif target.startswith('@') or not target.isdigit():
+        chat_id = message.chat.id
+        
+        # Try username lookup
+        if target.startswith('@'):
+            user_id = await db.find_user_by_username(target, chat_id)
+            if user_id:
+                print(f"DEBUG: Found user by username {target}: {user_id}")
+                display_name = target
+        
+        # Try nickname lookup if username failed
+        if not user_id:
+            user_id = await db.find_user_by_nickname(target, chat_id)
+            if user_id:
+                print(f"DEBUG: Found user by nickname {target}: {user_id}")
+                display_name = target
+        
+        # Try first name lookup if nickname failed
+        if not user_id:
+            user_id = await db.find_user_by_name(target, chat_id)
+            if user_id:
+                print(f"DEBUG: Found user by name {target}: {user_id}")
+                display_name = target
+    
+    if user_id:
+        return user_id, display_name
+    else:
+        print(f"DEBUG: Could not find user: {target}")
+        return 0, target
 
 async def can_moderate_target(message: Message, user_rank: str, target_user_id: int) -> bool:
     """Check if user can moderate target (prevent acting on equal/higher ranks)"""
@@ -266,8 +298,8 @@ async def ban_command(message: Message):
     text = message.text or ""
     parts = text.split(maxsplit=2)
     
-    if len(parts) < 3:
-        await message.answer("❌ Использование: `/ban [пользователь] [причина]`", parse_mode="Markdown")
+    if len(parts) < 2:
+        await message.answer("❌ Использование: `/ban [пользователь] [причина]` или ответьте на сообщение пользователя", parse_mode="Markdown")
         return
     
     target_user_id, target_name = await get_moderation_target_user(message, text)
@@ -313,8 +345,8 @@ async def warn_command(message: Message):
     text = message.text or ""
     parts = text.split(maxsplit=2)
     
-    if len(parts) < 3:
-        await message.answer("❌ Использование: `/warn [пользователь] [причина]`", parse_mode="Markdown")
+    if len(parts) < 2:
+        await message.answer("❌ Использование: `/warn [пользователь] [причина]` или ответьте на сообщение пользователя", parse_mode="Markdown")
         return
     
     target_user_id, target_name = await get_moderation_target_user(message, text)
@@ -368,8 +400,8 @@ async def kick_command(message: Message):
     text = message.text or ""
     parts = text.split(maxsplit=2)
     
-    if len(parts) < 3:
-        await message.answer("❌ Использование: `/kick [пользователь] [причина]`", parse_mode="Markdown")
+    if len(parts) < 2:
+        await message.answer("❌ Использование: `/kick [пользователь] [причина]` или ответьте на сообщение пользователя", parse_mode="Markdown")
         return
     
     target_user_id, target_name = await get_moderation_target_user(message, text)
@@ -504,11 +536,12 @@ async def ban_text_command(message: Message):
     
     text = message.text or ""
     # Convert: "бан пользователь причина" -> "/ban пользователь причина"
-    command_text = "/ban " + text[4:]  # Replace "бан " with "/ban "
+    # Find the word "бан" and replace it with "/ban"
+    command_text = text.replace("бан", "/ban", 1)
     parts = command_text.split(maxsplit=2)
     
-    if len(parts) < 3:
-        await message.answer("❌ Использование: `бан [пользователь] [причина]`", parse_mode="Markdown")
+    if len(parts) < 2:
+        await message.answer("❌ Использование: `бан [пользователь] [причина]` или ответьте на сообщение пользователя", parse_mode="Markdown")
         return
     
     target_user_id, target_name = await get_moderation_target_user(message, command_text)
@@ -551,11 +584,12 @@ async def kick_text_command(message: Message):
         return
     
     text = message.text or ""
-    command_text = "/kick " + text[4:]  # Replace "кик " with "/kick "
+    # Convert: "кик пользователь причина" -> "/kick пользователь причина"
+    command_text = text.replace("кик", "/kick", 1)
     parts = command_text.split(maxsplit=2)
     
-    if len(parts) < 3:
-        await message.answer("❌ Использование: `кик [пользователь] [причина]`", parse_mode="Markdown")
+    if len(parts) < 2:
+        await message.answer("❌ Использование: `кик [пользователь] [причина]` или ответьте на сообщение пользователя", parse_mode="Markdown")
         return
     
     target_user_id, target_name = await get_moderation_target_user(message, command_text)
@@ -599,11 +633,12 @@ async def warn_text_command(message: Message):
         return
     
     text = message.text or ""
-    command_text = "/warn " + text[5:]  # Replace "варн " with "/warn "
+    # Convert: "варн пользователь причина" -> "/warn пользователь причина"
+    command_text = text.replace("варн", "/warn", 1)
     parts = command_text.split(maxsplit=2)
     
-    if len(parts) < 3:
-        await message.answer("❌ Использование: `варн [пользователь] [причина]`", parse_mode="Markdown")
+    if len(parts) < 2:
+        await message.answer("❌ Использование: `варн [пользователь] [причина]` или ответьте на сообщение пользователя", parse_mode="Markdown")
         return
     
     target_user_id, target_name = await get_moderation_target_user(message, command_text)

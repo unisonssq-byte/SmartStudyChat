@@ -270,3 +270,39 @@ class Database:
                 LIMIT ?
             """, (chat_id, limit))
             return await cursor.fetchall()
+    
+    async def find_user_by_username(self, username: str, chat_id: int) -> Optional[int]:
+        """Find user ID by username in specific chat"""
+        # Remove @ if present
+        clean_username = username.lstrip('@')
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                SELECT u.user_id FROM users u
+                JOIN chat_members cm ON u.user_id = cm.user_id
+                WHERE u.username = ? AND cm.chat_id = ?
+            """, (clean_username, chat_id))
+            result = await cursor.fetchone()
+            return result[0] if result else None
+    
+    async def find_user_by_nickname(self, nickname: str, chat_id: int) -> Optional[int]:
+        """Find user ID by nickname in specific chat"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                SELECT u.user_id FROM users u
+                JOIN chat_members cm ON u.user_id = cm.user_id
+                WHERE u.nickname = ? AND cm.chat_id = ?
+            """, (nickname, chat_id))
+            result = await cursor.fetchone()
+            return result[0] if result else None
+    
+    async def find_user_by_name(self, name: str, chat_id: int) -> Optional[int]:
+        """Find user ID by first name in specific chat"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                SELECT u.user_id FROM users u
+                JOIN chat_members cm ON u.user_id = cm.user_id
+                WHERE u.first_name = ? AND cm.chat_id = ?
+            """, (name, chat_id))
+            result = await cursor.fetchone()
+            return result[0] if result else None
