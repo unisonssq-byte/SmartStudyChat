@@ -306,3 +306,9 @@ class Database:
             """, (name, chat_id))
             result = await cursor.fetchone()
             return result[0] if result else None
+    
+    async def ensure_user_exists(self, user_id: int, username: str = None, first_name: str = None, last_name: str = None, chat_id: int = None):
+        """Ensure user exists in database and optionally add to chat"""
+        await self.add_user(user_id, username, first_name, last_name)
+        if chat_id:
+            await self.add_chat_member(user_id, chat_id)

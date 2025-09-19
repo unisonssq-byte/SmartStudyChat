@@ -96,6 +96,10 @@ async def get_moderation_target_user(message: Message, text: Optional[str] = Non
         user = message.reply_to_message.from_user
         display_name = user.first_name or user.username or str(user.id)
         print(f"DEBUG: Found user via reply: {user.id} ({display_name})")
+        
+        # Ensure the target user exists in database
+        await db.ensure_user_exists(user.id, user.username, user.first_name, user.last_name, message.chat.id)
+        
         return user.id, display_name
     
     # Use provided text or message.text
@@ -290,6 +294,9 @@ async def ban_command(message: Message):
         await message.answer("❌ Команда доступна только в групповых чатах!")
         return
     
+    # Ensure command author exists in database
+    await db.ensure_user_exists(user.id, user.username, user.first_name, user.last_name, chat.id)
+    
     # Check permissions
     user_rank = await get_user_telegram_rank(message, user.id)
     if not user_rank or user_rank not in COMMAND_PERMISSIONS['ban']:
@@ -331,6 +338,9 @@ async def warn_command(message: Message):
     if not user or chat.type == 'private':
         await message.answer("❌ Команда доступна только в групповых чатах!")
         return
+    
+    # Ensure command author exists in database
+    await db.ensure_user_exists(user.id, user.username, user.first_name, user.last_name, chat.id)
     
     # Check permissions
     user_rank = await get_user_telegram_rank(message, user.id)
@@ -386,6 +396,9 @@ async def kick_command(message: Message):
     if not user or chat.type == 'private':
         await message.answer("❌ Команда доступна только в групповых чатах!")
         return
+    
+    # Ensure command author exists in database
+    await db.ensure_user_exists(user.id, user.username, user.first_name, user.last_name, chat.id)
     
     # Check permissions
     user_rank = await get_user_telegram_rank(message, user.id)
