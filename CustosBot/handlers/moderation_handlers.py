@@ -6,6 +6,7 @@ from config import RANKS, RANK_NAMES, COMMAND_PERMISSIONS, RATE_LIMITS
 from keyboards.main_keyboards import get_confirmation_keyboard
 import re
 from datetime import datetime, timedelta
+from typing import Optional
 
 router = Router()
 db = Database()
@@ -88,7 +89,7 @@ async def get_target_user(message: Message, text: str) -> tuple[int, str]:
     
     return 0, ""
 
-async def get_moderation_target_user(message: Message, text: str = None) -> tuple[int, str]:
+async def get_moderation_target_user(message: Message, text: Optional[str] = None) -> tuple[int, str]:
     """Extract target user for ban/warn/kick commands"""
     # Check if it's a reply first - this is the most reliable method
     if message.reply_to_message and message.reply_to_message.from_user:
