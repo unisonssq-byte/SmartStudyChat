@@ -36,10 +36,10 @@ async def main():
     db = Database()
     await db.init_db()
     
-    # Register routers
-    dp.include_router(main_handlers.router)
+    # Register routers - specific handlers BEFORE general handlers
     dp.include_router(moderation_handlers.router)
-    dp.include_router(user_handlers.router)
+    dp.include_router(user_handlers.router) 
+    dp.include_router(main_handlers.router)
     
     # Create images directory
     os.makedirs("CustosBot/images", exist_ok=True)

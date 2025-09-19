@@ -79,7 +79,9 @@ async def help_command(message: Message):
         except Exception as e:
             print(f"Failed to generate commands image: {e}")
     
-    help_text = """
+    # Different help text for private chat vs group chat
+    if message.chat.type == 'private':
+        help_text = """
 📋 **Команды бота**
 
 **Модерация (только в чатах):**
@@ -101,19 +103,58 @@ async def help_command(message: Message):
 
 Полный список команд в нашей [статье](https://teletype.in/@unisonqq/custoscommands)
 """
+    else:
+        help_text = """
+📋 Команды бота
+
+Модерация (только в чатах):
+• /upstaff [число] [пользователь] - повысить ранг
+• /ban [пользователь] [причина] или бан [пользователь] [причина] - забанить
+• /warn [пользователь] [причина] или варн [пользователь] [причина] - выдать варн
+• /kick [пользователь] [причина] или кик [пользователь] [причина] - кикнуть
+• /staff или стафф, админы, стаф, кто админ - список персонала
+• /stats или стата - статистика активности чата
+
+Информация:
+• /help или помощь - эта справка
+
+Профиль:
+• /me или кто я - моя информация
+• /you [пользователь] или кто ты - информация о пользователе
+• /nickname +имя - установить никнейм
+• /description +описание - установить описание
+
+Полный список команд: https://teletype.in/@unisonqq/custoscommands
+"""
     
     try:
         if os.path.exists(image_path):
             photo = FSInputFile(image_path)
-            await message.answer_photo(
-                photo=photo,
-                caption=help_text,
-                parse_mode="Markdown"
-            )
+            if message.chat.type == 'private':
+                from keyboards.main_keyboards import get_back_keyboard
+                await message.answer_photo(
+                    photo=photo,
+                    caption=help_text,
+                    parse_mode="Markdown",
+                    reply_markup=get_back_keyboard()
+                )
+            else:
+                await message.answer_photo(
+                    photo=photo,
+                    caption=help_text
+                )
         else:
-            await message.answer(help_text, parse_mode="Markdown")
+            if message.chat.type == 'private':
+                from keyboards.main_keyboards import get_back_keyboard
+                await message.answer(help_text, parse_mode="Markdown", reply_markup=get_back_keyboard())
+            else:
+                await message.answer(help_text)
     except Exception as e:
-        await message.answer(help_text, parse_mode="Markdown")
+        if message.chat.type == 'private':
+            from keyboards.main_keyboards import get_back_keyboard
+            await message.answer(help_text, parse_mode="Markdown", reply_markup=get_back_keyboard())
+        else:
+            await message.answer(help_text)
 
 @router.message(F.text == "💬 Мои чаты")
 async def my_chats_command(message: Message):
@@ -157,17 +198,20 @@ async def my_chats_command(message: Message):
         chat_text += f"• [{title}]({chat_link}) - {rank}\n"
     
     try:
+        from keyboards.main_keyboards import get_back_keyboard
         if os.path.exists(image_path):
             photo = FSInputFile(image_path)
             await message.answer_photo(
                 photo=photo,
                 caption=chat_text,
-                parse_mode="Markdown"
+                parse_mode="Markdown",
+                reply_markup=get_back_keyboard()
             )
         else:
-            await message.answer(chat_text, parse_mode="Markdown")
+            await message.answer(chat_text, parse_mode="Markdown", reply_markup=get_back_keyboard())
     except Exception as e:
-        await message.answer(chat_text, parse_mode="Markdown")
+        from keyboards.main_keyboards import get_back_keyboard
+        await message.answer(chat_text, parse_mode="Markdown", reply_markup=get_back_keyboard())
 
 @router.message(F.text == "📋 Команды")
 async def commands_button(message: Message):
@@ -204,9 +248,59 @@ async def new_chat_members(message: Message):
             await db.add_chat(chat.id, chat.title or "Unknown Chat", chat.type)
             break
 
+@router.callback_query(F.data == "back_to_menu")
+async def back_to_menu_handler(callback: CallbackQuery):
+    """Handle 'Back' button press"""
+    user = callback.from_user
+    if not user:
+        return
+    
+    # Generate main menu image if not exists
+    image_path = "CustosBot/images/main_menu.png"
+    if not os.path.exists(image_path):
+        try:
+            await image_gen.generate_main_menu_image()
+        except Exception as e:
+            print(f"Failed to generate main menu image: {e}")
+    
+    # Send new main menu message (simpler and more reliable)
+    try:
+        from config import BOT_DESCRIPTION
+        from keyboards.main_keyboards import get_main_menu_keyboard, get_menu_buttons_keyboard
+        
+        if os.path.exists(image_path):
+            photo = FSInputFile(image_path)
+            await callback.message.answer_photo(
+                photo=photo,
+                caption=BOT_DESCRIPTION,
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            await callback.message.answer(
+                BOT_DESCRIPTION,
+                reply_markup=get_main_menu_keyboard()
+            )
+            
+        # Send menu buttons
+        await callback.message.answer(
+            "Выберите действие:",
+            reply_markup=get_menu_buttons_keyboard()
+        )
+        
+        # Try to delete the previous message
+        try:
+            await callback.message.delete()
+        except:
+            pass  # Ignore if can't delete
+            
+    except Exception as e:
+        print(f"Error in back_to_menu_handler: {e}")
+    
+    await callback.answer()
+
 @router.message(F.content_type.in_(["text"]))
 async def track_messages(message: Message):
-    """Track messages for statistics"""
+    """Track messages for statistics - this handler should be last"""
     user = message.from_user
     chat = message.chat
     
